@@ -25,6 +25,7 @@ const KeyboardDiagnostic: React.FC = () => {
                 ['vv.pageTop', vv ? String(Math.round(vv.pageTop)) : 'n/a'],
                 ['scrollY', String(Math.round(window.scrollY))],
                 ['--app-height', cs.getPropertyValue('--app-height').trim() || '-'],
+                ['--kb-inset', cs.getPropertyValue('--keyboard-inset').trim() || '-'],
                 ['safe-bottom', cs.getPropertyValue('--standalone-safe-area-bottom').trim() || '-'],
                 ['safe-top', cs.getPropertyValue('--standalone-safe-area-top').trim() || '-'],
                 ['kb-open class', document.body.classList.contains('ios-keyboard-open') ? 'YES' : 'no'],

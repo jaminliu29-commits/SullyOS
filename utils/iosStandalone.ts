@@ -117,10 +117,16 @@ const setViewportVars = () => {
         // innerHeight 跟着变矮，obscuredHeight 算出来是 0 而失效。viewportHeight > 150 是对 iOS 偶发脏值的护栏——
         // 键盘动画期 visualViewport 偶尔报错值，此时退化成「无键盘态」，宁可不避让也不要把布局撑崩成满屏白。
         keyboardOpen = viewportHeight > 150 && viewportHeight < stableStandaloneHeight - 100;
-        // 键盘态：app 高度收到当前可视区（home 条已被键盘盖，不再叠加 safe）；无键盘态：基线 + safe（底部给 home 条留位）。
-        fullAppHeight = keyboardOpen ? viewportHeight : stableStandaloneHeight + bottomSafeInset;
-        // standalone 下键盘避让改由「app 高度跟随可视区」统一处理，keyboard-inset 置 0，避免 CallApp 等再叠一层 padding。
-        keyboardInset = 0;
+        // 外壳高度恒定，键盘弹出时不再把 app 整个缩到键盘上缘。缩高度有两个毛病：
+        // ① 键盘动画期间 visualViewport 每帧都派发 resize，每次都改高度 → 整棵树逐帧 reflow，肉眼就是「闪一下」；
+        // ② 外壳正好在键盘上缘截断，而 iOS 的候选条/表单导航条是半透明的，它背后没有 App 内容，
+        //    透出来的是外壳底下那层桌布，看起来就像输入栏和键盘中间裂开一条缝。
+        // 改成：高度不动（内容照旧铺满整屏、延伸到键盘底下），只把内容区底边抬到键盘上方。
+        fullAppHeight = stableStandaloneHeight + bottomSafeInset;
+        // 让位量 = 外壳底边到键盘上缘的距离。消费它的容器（外壳 / chat root）高度就是 fullAppHeight，
+        // 必须用同一基准来减，否则会差一个 bottomSafeInset —— 外壳底部那 34px 是刻意挂在屏幕外的，
+        // 用 stableStandaloneHeight 去减会让位不足，输入栏正好沉到键盘底下 34px。
+        keyboardInset = keyboardOpen ? fullAppHeight - viewportHeight : 0;
         // iOS 26 键盘弹出会把整页顶上去（visualViewport.offsetTop > 0），拉回顶部对齐可视区；
         // 配合 ios-keyboard-open 下的 touchmove 拦截（见 installIOSStandaloneWorkaround），把外层滚动彻底锁死。
         if (keyboardOpen && viewportOffsetTop > 0) {
@@ -148,8 +154,8 @@ const setViewportVars = () => {
         }
     }
 
-    // 键盘态标记和 --app-height 必须同源：标记一挂，外壳就铺到 app 高度多出的那段底部安全区、
-    // 输入栏同时收掉自己的让位间隙，两者净位移为 0 —— 前提是高度也同时收到键盘上方。
+    // 键盘态标记和 --keyboard-inset 必须同源：标记一挂，外壳内容区底边就抬到 inset 上方、
+    // 输入栏同时收掉自己给 home 条的让位间隙，两者净位移为 0 —— 前提是 inset 同时拿到真值。
     // 所以判据只认「可视区真的变矮了」，不认「输入框拿到了焦点」：设备上键盘弹不出来时
     // （接了外接键盘、输入法异常），焦点照样进得来，但可视区纹丝不动，此时挂标记就会把
     // 输入条整条推出屏幕、home 条骑到输入框上。顺带这样也不再依赖 focusout 来摘标记——

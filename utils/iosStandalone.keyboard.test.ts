@@ -2,12 +2,13 @@
 /**
  * utils/iosStandalone.keyboard.test.ts — 键盘态布局的回归守卫。
  *
- * 背景：iOS 全屏 PWA 下 body 高度会比可视区多出一段底部安全区（给 home 条留位），
- * `.ios-keyboard-open` 一挂，外壳就铺到那段溢出区、聊天输入栏同时收掉自己的让位间隙。
- * 两个动作合起来净位移为 0，前提是「标记挂上」和「app 高度收到键盘上方」同时发生。
- * 只要有一边先动，输入条就整条沉出屏幕、home 条骑到输入框上。
+ * 背景：iOS 全屏 PWA 下 body 高度会比可视区多出一段底部安全区（给 home 条留位）。
+ * 键盘弹出时 app 高度保持不变（内容继续铺到键盘底下，避免半透明候选条背后透出桌布，
+ * 也避免逐帧改高度导致整棵树 reflow），改由 --keyboard-inset 把内容区底边抬到键盘上缘。
  *
- * 这里钉住的不变式：键盘态只认 visualViewport 真的变矮，不认焦点事件。
+ * 这里钉住的不变式：
+ * ① 键盘态只认 visualViewport 真的变矮，不认焦点事件；
+ * ② 进键盘态时 --app-height 不动，只有 --keyboard-inset 变。
  *
  * @vitest-environment jsdom
  */
@@ -80,6 +81,7 @@ const focusTextarea = () => {
 };
 
 const appHeight = () => document.documentElement.style.getPropertyValue('--app-height');
+const keyboardInset = () => document.documentElement.style.getPropertyValue('--keyboard-inset');
 const inKeyboardMode = () => document.body.classList.contains('ios-keyboard-open');
 
 describe('iOS 全屏 PWA 键盘态', () => {
@@ -122,13 +124,18 @@ describe('iOS 全屏 PWA 键盘态', () => {
         expect(appHeight()).toBe(`${SCREEN_H + SAFE_BOTTOM}px`);
     });
 
-    it('可视区真的变矮 → 标记和高度一起进键盘态', async () => {
+    // 回归守卫：键盘态下 app 高度必须保持不变。一旦改回「高度跟随可视区」，外壳就会在键盘上缘截断，
+    // iOS 半透明候选条背后透出外壳底下的桌布（看起来像输入栏和键盘裂开），
+    // 且键盘动画期每次 visualViewport resize 都会让整棵树 reflow，肉眼就是「闪一下」。
+    it('可视区真的变矮 → 标记和 keyboard-inset 一起进键盘态，app 高度不动', async () => {
         await install();
         focusTextarea();
         emitViewportResize(SCREEN_H - KEYBOARD_H);
 
         expect(inKeyboardMode()).toBe(true);
-        expect(appHeight()).toBe(`${SCREEN_H - KEYBOARD_H}px`);
+        expect(appHeight()).toBe(`${SCREEN_H + SAFE_BOTTOM}px`);
+        // 让位量按外壳全高（含挂在屏幕外的那段安全区）算，否则输入栏会少让一个 SAFE_BOTTOM、沉到键盘底下。
+        expect(keyboardInset()).toBe(`${KEYBOARD_H + SAFE_BOTTOM}px`);
     });
 
     // 回归守卫：聚焦中的输入框被 React 卸载时（退出聊天页），WebKit 不派发 focusout。
@@ -144,6 +151,7 @@ describe('iOS 全屏 PWA 键盘态', () => {
 
         expect(inKeyboardMode()).toBe(false);
         expect(appHeight()).toBe(`${SCREEN_H + SAFE_BOTTOM}px`);
+        expect(keyboardInset()).toBe('0px');
     });
 
     it('键盘动画期可视高度报脏值 → 退化成无键盘态，不把布局撑崩', async () => {

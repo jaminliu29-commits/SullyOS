@@ -248,8 +248,21 @@
       .sully-chat-inputbar {
         transition: padding-bottom 0.18s ease-out;
       }
+      /* 键盘让位一律用 padding 而不是缩高度：背景会画到 padding box，所以让位的那一层
+         背景仍然铺到键盘底下，iOS 半透明候选条模糊到的是 App 自己的背景，看起来输入栏是
+         贴着键盘的。缩高度则会在键盘上缘把外壳整个截断，候选条背后透出底下那层桌布，
+         看起来就像输入栏和键盘中间裂开一条缝。
+         外壳保持 bottom:0（键盘已盖住 home 条，不必再为它让位）。 */
       body.ios-keyboard-open .sully-shell-content {
         bottom: 0 !important;
+        padding-bottom: var(--keyboard-inset, 0px) !important;
+      }
+      /* Chat 自己把背景铺到键盘底下：让位改挂在 chat root 上，外壳就不要再让一次（否则让位翻倍）。 */
+      body.ios-keyboard-open .sully-shell-content:has(.sully-chat-root) {
+        padding-bottom: 0 !important;
+      }
+      body.ios-keyboard-open .sully-chat-root {
+        padding-bottom: var(--keyboard-inset, 0px);
       }
       body.ios-keyboard-open .sully-chat-inputbar {
         padding-bottom: 0;
