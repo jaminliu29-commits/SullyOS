@@ -135,10 +135,16 @@
         --chrome-top: calc(var(--safe-top) + 1.5rem);
         --app-height: 100lvh;
         --keyboard-inset: 0px;
+        /* iOS 软键盘底色，用来把让位腾出的那段铺成和键盘一样的颜色（见 .sully-shell-content::after）。
+           跟随系统深浅色，键盘自己也是这么切的。 */
+        --ios-keyboard-bg: #d1d4da;
         --app-font: 'Quicksand', sans-serif;
       }
       /* 动森风格皮肤：拉丁/数字用 Nunito（圆润），中文用 ZCOOL KuaiLe（可爱），保留 Noto Sans SC 兜底。
          选择 html[data-skin] 而非 :root，优先级更高，能盖过运行时注入的 --app-font。 */
+      @media (prefers-color-scheme: dark) {
+        :root { --ios-keyboard-bg: #1c1c1e; }
+      }
       html[data-skin="animalcrossing"] {
         --app-font: 'Nunito', 'ZCOOL KuaiLe', 'Noto Sans SC', sans-serif;
       }
@@ -257,12 +263,19 @@
         bottom: 0 !important;
         padding-bottom: var(--keyboard-inset, 0px) !important;
       }
-      /* Chat 自己把背景铺到键盘底下：让位改挂在 chat root 上，外壳就不要再让一次（否则让位翻倍）。 */
-      body.ios-keyboard-open .sully-shell-content:has(.sully-chat-root) {
-        padding-bottom: 0 !important;
-      }
-      body.ios-keyboard-open .sully-chat-root {
-        padding-bottom: var(--keyboard-inset, 0px);
+      /* 让位腾出来的那段铺成键盘色。iOS 的候选条/表单导航条是半透明的，会把背后的东西模糊出来：
+         露出 App 背景（聊天壁纸等）就会看出一条和键盘不同的色带，视觉上输入栏像是和键盘裂开。
+         铺成键盘色后这段和键盘连成一片，输入栏就贴在键盘上。
+         整段都在键盘底下，不会遮住任何 App 内容。 */
+      body.ios-keyboard-open .sully-shell-content::after {
+        content: '';
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: var(--keyboard-inset, 0px);
+        background: var(--ios-keyboard-bg);
+        pointer-events: none;
       }
       body.ios-keyboard-open .sully-chat-inputbar {
         padding-bottom: 0;

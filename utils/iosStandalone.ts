@@ -202,18 +202,10 @@ export const installIOSStandaloneWorkaround = () => {
     const handleFocusIn = (event: FocusEvent) => {
         if (!isTextEntryElement(event.target)) return;
         setViewportVars();
-
-        const target = event.target;
-        window.requestAnimationFrame(() => {
-            window.requestAnimationFrame(() => {
-                if (document.activeElement !== target) return;
-                try {
-                    target.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-                } catch {
-                    // Ignore scroll failures on older iOS builds.
-                }
-            });
-        });
+        // 这里曾经再跟一个 scrollIntoView（双 rAF 后执行）。它正好落在键盘升起的动画中途，
+        // 此时让位还没算完，WebKit 会按「旧的可视区」把页面猛地滚一下、下一帧让位到位又弹回来——
+        // 肉眼就是「整页从上面掉下来一帧又回去」。键盘让位已由 --keyboard-inset 的 padding 保证
+        // 输入框落在键盘上方，不需要再滚一次，所以这里什么都不做。
     };
 
     // 键盘收起由 visualViewport 变化驱动，这里只做一次兜底重算，

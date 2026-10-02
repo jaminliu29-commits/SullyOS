@@ -1279,6 +1279,25 @@ const Chat: React.FC = () => {
         }
     }, [messages, isTyping, streamingBubbles, streamingThinking, recallStatus, searchStatus, diaryStatus, selectionMode, windowedFocusMsgId]);
 
+    // 键盘弹出让可视区变矮时，把最新消息重新顶到底部——不然消息停在原地、底下几条被键盘盖掉，
+    // 不像真手机那样「整屏往上抬」。只在本来就贴着底部时才跟：用户正往上翻历史就别抢他的位置。
+    // 距离要在布局收缩前量（此刻 resize 刚派发、padding 还没生效），滚动则等 rAF 后再做。
+    useEffect(() => {
+        const viewport = window.visualViewport;
+        if (!viewport) return;
+        const handleViewportShrink = () => {
+            const scroller = scrollRef.current;
+            if (!scroller || selectionMode || windowedFocusMsgId !== null) return;
+            if (scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight > 160) return;
+            requestAnimationFrame(() => {
+                const el = scrollRef.current;
+                if (el) el.scrollTop = el.scrollHeight;
+            });
+        };
+        viewport.addEventListener('resize', handleViewportShrink);
+        return () => viewport.removeEventListener('resize', handleViewportShrink);
+    }, [selectionMode, windowedFocusMsgId]);
+
     // 白框提示音：当 char 新发的消息成为会话最后一条时播放一次（用户自己/历史/翻旧消息都不响）。
     // 声音配置编码在白框 CSS 注释里（角色 chromeCustomCss 覆盖全局 chatChromeCustomCss），随白框分享一起走。
     useEffect(() => {
