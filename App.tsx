@@ -26,7 +26,7 @@ const App: React.FC = () => {
           browser (non-standalone) mode. With fixed+absolute the inner div fills the
           outer div and shrinks with it when JS updates --app-height. */}
       <div
-        className="fixed inset-0 w-full bg-transparent overflow-hidden"
+        className="fixed top-0 left-0 right-0 w-full bg-transparent overflow-hidden"
         style={{ height: 'var(--app-height, 100dvh)' }}
       >
         <div
