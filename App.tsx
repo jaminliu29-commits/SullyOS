@@ -9,7 +9,6 @@ import Amsg2DebugPanel from './components/Amsg2DebugPanel';
 import VRBroadcast from './components/VRBroadcast';
 import WorldBroadcast from './components/WorldBroadcast';
 import ChatBroadcast from './components/ChatBroadcast';
-import KeyboardDiagnostic from './components/KeyboardDiagnostic';
 
 import { installDevDebugLifecycleCapture } from './utils/devDebug';
 
@@ -49,7 +48,6 @@ const App: React.FC = () => {
       <VRBroadcast />
       <WorldBroadcast />
       <ChatBroadcast />
-      <KeyboardDiagnostic />
     </>
   );
 };

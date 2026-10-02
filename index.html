@@ -254,17 +254,6 @@
       .sully-chat-inputbar {
         transition: padding-bottom 0.18s ease-out;
       }
-      /* 让位是在 focusin 当下一次性加满的（预让位，见 utils/iosStandalone.ts），而键盘是用约 250ms
-         动画升起来的。不缓动的话内容「唰」地弹到位、键盘才慢慢跟上，那个错位就是肉眼看到的闪一下。
-         缓动时长对齐键盘动画，两者一起走。 */
-      .sully-shell-content {
-        transition: padding-bottom 0.25s cubic-bezier(0.17, 0.59, 0.4, 1);
-      }
-      @media (prefers-reduced-motion: reduce) {
-        .sully-shell-content {
-          transition: none;
-        }
-      }
       /* 键盘让位一律用 padding 而不是缩高度：背景会画到 padding box，所以让位的那一层
          背景仍然铺到键盘底下，iOS 半透明候选条模糊到的是 App 自己的背景，看起来输入栏是
          贴着键盘的。缩高度则会在键盘上缘把外壳整个截断，候选条背后透出底下那层桌布，
