@@ -8,6 +8,15 @@ let keyboardFixesEnabled = false;
 // 避免「一边真值、一边瞬时 0」被整体锁死（否则 home 条避让会失效，直到旋转/尺寸变化才恢复）。
 let cachedTopInset: number | null = null;
 let cachedBottomInset: number | null = null;
+// 上一次实测到的键盘让位量，focusin 时拿来预让位（见 handleFocusIn）。
+let lastKeyboardInset = 0;
+// 预让位生效中：已按经验值让位，但 visualViewport 还没真的变矮。
+let keyboardPending = false;
+let pendingKeyboardInset = 0;
+let pendingRevertTimer = 0;
+// 没有经验值时（本次会话第一次聚焦）按可视高度估键盘占比。实测 844pt 屏让位 431px ≈ 0.51，
+// 估偏一点也只是键盘升起时内容多微调几 px，远好过完全不预让位、让 WebKit 自己平移整页。
+const KEYBOARD_INSET_GUESS_RATIO = 0.52;
 
 // 用一个隐藏探针同时读取上下安全区：单次插入 + 单次 getComputedStyle（一次 reflow）。
 // env() 在本项目 iOS 全屏 PWA 下偶发返回 0，故需 JS 探测兜底。
@@ -116,7 +125,10 @@ const setViewportVars = () => {
         // 键盘态判据用「可视高度变矮」而非 obscuredHeight：iOS 26 起 standalone 会把 layout viewport 也一起缩，
         // innerHeight 跟着变矮，obscuredHeight 算出来是 0 而失效。viewportHeight > 150 是对 iOS 偶发脏值的护栏——
         // 键盘动画期 visualViewport 偶尔报错值，此时退化成「无键盘态」，宁可不避让也不要把布局撑崩成满屏白。
-        keyboardOpen = viewportHeight > 150 && viewportHeight < stableStandaloneHeight - 100;
+        const measuredKeyboardOpen = viewportHeight > 150 && viewportHeight < stableStandaloneHeight - 100;
+        // 预让位期间（focusin 已按经验值让位、visualViewport 还没变矮）也算键盘态，
+        // 否则这中间每次 resize 都会把 inset 打回 0，让位一上一下反而比不预让更闪。
+        keyboardOpen = measuredKeyboardOpen || keyboardPending;
         // 外壳高度恒定，键盘弹出时不再把 app 整个缩到键盘上缘。缩高度有两个毛病：
         // ① 键盘动画期间 visualViewport 每帧都派发 resize，每次都改高度 → 整棵树逐帧 reflow，肉眼就是「闪一下」；
         // ② 外壳正好在键盘上缘截断，而 iOS 的候选条/表单导航条是半透明的，它背后没有 App 内容，
@@ -126,7 +138,14 @@ const setViewportVars = () => {
         // 让位量 = 外壳底边到键盘上缘的距离。消费它的容器（外壳 / chat root）高度就是 fullAppHeight，
         // 必须用同一基准来减，否则会差一个 bottomSafeInset —— 外壳底部那 34px 是刻意挂在屏幕外的，
         // 用 stableStandaloneHeight 去减会让位不足，输入栏正好沉到键盘底下 34px。
-        keyboardInset = keyboardOpen ? fullAppHeight - viewportHeight : 0;
+        if (measuredKeyboardOpen) {
+            keyboardInset = fullAppHeight - viewportHeight;
+            // 实测值接管预让位，并记下来给下一次 focusin 当经验值。
+            lastKeyboardInset = keyboardInset;
+            keyboardPending = false;
+        } else {
+            keyboardInset = keyboardPending ? pendingKeyboardInset : 0;
+        }
         // iOS 26 键盘弹出会把整页顶上去（visualViewport.offsetTop > 0），拉回顶部对齐可视区；
         // 配合 ios-keyboard-open 下的 touchmove 拦截（见 installIOSStandaloneWorkaround），把外层滚动彻底锁死。
         if (keyboardOpen && viewportOffsetTop > 0) {
@@ -197,20 +216,42 @@ export const installIOSStandaloneWorkaround = () => {
         setViewportVars();
     };
 
-    // 聚焦只当「立刻重算一次」的时机，不直接判键盘态：此刻键盘还没弹起来，
-    // 要等 visualViewport 真的变矮，setViewportVars 才会挂上标记、同时把高度收到键盘上方。
+    // 聚焦的当下就按经验值把位让好，不等 visualViewport 变矮。
+    // 等的话这一刻输入框还在键盘底下，而外壳是 position:fixed、body 又锁了滚动，
+    // WebKit 没法滚动文档去露出它，就改为平移整个可视区——肉眼就是「整页掉下来一帧」，
+    // 等我们让位到位它再平移回来。先让位，输入框一开始就在可视区内，WebKit 就不会平移。
     const handleFocusIn = (event: FocusEvent) => {
         if (!isTextEntryElement(event.target)) return;
+
+        // 只有全屏 PWA 走预让位：浏览器分支的让位本来就由 app 高度跟随可视区处理，
+        // 且地址栏在场时 WebKit 的平移行为不一样，预让位反而会多推一截。
+        if (useStandaloneFixes && !keyboardPending && !document.body.classList.contains('ios-keyboard-open')) {
+            const guess = lastKeyboardInset
+                || Math.round((stableStandaloneHeight || window.innerHeight) * KEYBOARD_INSET_GUESS_RATIO);
+            if (guess > 0) {
+                keyboardPending = true;
+                pendingKeyboardInset = guess;
+                // 键盘最终没弹出来（接了外接键盘、输入法异常）时撤掉预让位，
+                // 否则这一屏会一直被顶在半空、底部留一大块空白。
+                window.clearTimeout(pendingRevertTimer);
+                pendingRevertTimer = window.setTimeout(() => {
+                    if (!keyboardPending) return;
+                    keyboardPending = false;
+                    setViewportVars();
+                }, 900);
+            }
+        }
+
         setViewportVars();
-        // 这里曾经再跟一个 scrollIntoView（双 rAF 后执行）。它正好落在键盘升起的动画中途，
-        // 此时让位还没算完，WebKit 会按「旧的可视区」把页面猛地滚一下、下一帧让位到位又弹回来——
-        // 肉眼就是「整页从上面掉下来一帧又回去」。键盘让位已由 --keyboard-inset 的 padding 保证
-        // 输入框落在键盘上方，不需要再滚一次，所以这里什么都不做。
     };
 
     // 键盘收起由 visualViewport 变化驱动，这里只做一次兜底重算，
     // 防 iOS 偶发漏发 resize 让高度停在键盘态。
     const handleFocusOut = () => {
+        // 预让位是为「马上要弹键盘」准备的，焦点都丢了就别再吊着；真键盘还开着的话
+        // measuredKeyboardOpen 会在下次重算时继续把让位撑住，不会误收。
+        window.clearTimeout(pendingRevertTimer);
+        keyboardPending = false;
         window.setTimeout(setViewportVars, 180);
     };
 

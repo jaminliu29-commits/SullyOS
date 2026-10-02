@@ -114,14 +114,33 @@ describe('iOS 全屏 PWA 键盘态', () => {
         expect(inKeyboardMode()).toBe(false);
     });
 
-    // 回归守卫：输入框拿到焦点不等于键盘弹出来了。设备上键盘弹不出来时（外接键盘、输入法异常），
-    // 旧实现照样挂标记，外壳铺到那 34px 溢出区、输入栏又收掉让位间隙，输入条整条沉出屏幕。
-    it('焦点进来但可视区没变矮 → 不进键盘态，高度不动', async () => {
+    // 聚焦当下就按经验值预让位：外壳是 fixed、body 锁了滚动，输入框此刻还在键盘底下时
+    // WebKit 没法滚文档去露出它，会改为平移整个可视区（肉眼就是「整页掉下来一帧」再平移回来）。
+    // 先让位，输入框一开始就在可视区内，WebKit 就不平移。
+    it('焦点进来 → 立刻按经验值预让位，不等可视区变矮', async () => {
         await install();
         focusTextarea();
 
-        expect(inKeyboardMode()).toBe(false);
+        expect(inKeyboardMode()).toBe(true);
+        expect(keyboardInset()).not.toBe('0px');
         expect(appHeight()).toBe(`${SCREEN_H + SAFE_BOTTOM}px`);
+    });
+
+    // 回归守卫：预让位是赌「马上要弹键盘」，赌输了必须自己撤回。
+    // 设备上键盘弹不出来时（接了外接键盘、输入法异常），焦点照样进得来但可视区纹丝不动，
+    // 不撤的话这一屏会一直被顶在半空、底部空出一大块。
+    it('预让位后键盘始终没弹出来 → 超时撤回让位', async () => {
+        await install();
+        vi.useFakeTimers();
+        focusTextarea();
+        expect(inKeyboardMode()).toBe(true);
+
+        vi.advanceTimersByTime(1000);
+
+        expect(inKeyboardMode()).toBe(false);
+        expect(keyboardInset()).toBe('0px');
+        expect(appHeight()).toBe(`${SCREEN_H + SAFE_BOTTOM}px`);
+        vi.useRealTimers();
     });
 
     // 回归守卫：键盘态下 app 高度必须保持不变。一旦改回「高度跟随可视区」，外壳就会在键盘上缘截断，
@@ -154,12 +173,15 @@ describe('iOS 全屏 PWA 键盘态', () => {
         expect(keyboardInset()).toBe('0px');
     });
 
-    it('键盘动画期可视高度报脏值 → 退化成无键盘态，不把布局撑崩', async () => {
+    // 键盘动画期 visualViewport 偶尔报脏值。app 高度恒定所以布局撑不崩，
+    // 但让位不能跟着脏值抖：预让位要稳住，不能被打回 0 再弹回来（那就是一次肉眼可见的跳动）。
+    it('键盘动画期可视高度报脏值 → 让位稳住不抖，高度不动', async () => {
         await install();
         focusTextarea();
+        const insetBeforeGarbage = keyboardInset();
         emitViewportResize(80);
 
-        expect(inKeyboardMode()).toBe(false);
+        expect(keyboardInset()).toBe(insetBeforeGarbage);
         expect(appHeight()).toBe(`${SCREEN_H + SAFE_BOTTOM}px`);
     });
 

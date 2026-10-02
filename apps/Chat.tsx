@@ -1247,10 +1247,15 @@ const Chat: React.FC = () => {
         historyWindowLoadingRef.current = false;
     }, [historyWindowRange]);
 
+    // 键盘让位会让 clientHeight 骤减几百 px，那之后再量「离底多远」永远是「很远」。
+    // 所以贴底与否必须在让位发生前就记下来，由滚动事件持续维护。
+    const nearBottomRef = useRef(true);
+
     const handleChatScroll = useCallback(() => {
         const scroller = scrollRef.current;
         if (!scroller) return;
         const distanceFromBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
+        nearBottomRef.current = distanceFromBottom <= 160;
         if (distanceFromBottom > 96) pendingMediaAutoScrollIdRef.current = null;
 
         if (historyWindowScrollEnabledRef.current && historyWindowRangeRef.current) {
@@ -1279,23 +1284,26 @@ const Chat: React.FC = () => {
         }
     }, [messages, isTyping, streamingBubbles, streamingThinking, recallStatus, searchStatus, diaryStatus, selectionMode, windowedFocusMsgId]);
 
-    // 键盘弹出让可视区变矮时，把最新消息重新顶到底部——不然消息停在原地、底下几条被键盘盖掉，
+    // 键盘让位后把最新消息重新顶到底部——不然消息停在原地、底下几条被键盘盖掉，
     // 不像真手机那样「整屏往上抬」。只在本来就贴着底部时才跟：用户正往上翻历史就别抢他的位置。
-    // 距离要在布局收缩前量（此刻 resize 刚派发、padding 还没生效），滚动则等 rAF 后再做。
+    // 贴底判断读 nearBottomRef（让位前由滚动事件维护），不能在这里现量：
+    // iosStandalone 的监听注册得更早、先跑，等轮到这里 clientHeight 已经缩掉了。
+    // focusin 和 resize 都要接：预让位发生在 focusin，真实键盘高度到位则在 resize。
     useEffect(() => {
-        const viewport = window.visualViewport;
-        if (!viewport) return;
-        const handleViewportShrink = () => {
-            const scroller = scrollRef.current;
-            if (!scroller || selectionMode || windowedFocusMsgId !== null) return;
-            if (scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight > 160) return;
+        const repinToBottom = () => {
+            if (selectionMode || windowedFocusMsgId !== null || !nearBottomRef.current) return;
             requestAnimationFrame(() => {
                 const el = scrollRef.current;
                 if (el) el.scrollTop = el.scrollHeight;
             });
         };
-        viewport.addEventListener('resize', handleViewportShrink);
-        return () => viewport.removeEventListener('resize', handleViewportShrink);
+        const viewport = window.visualViewport;
+        viewport?.addEventListener('resize', repinToBottom);
+        document.addEventListener('focusin', repinToBottom);
+        return () => {
+            viewport?.removeEventListener('resize', repinToBottom);
+            document.removeEventListener('focusin', repinToBottom);
+        };
     }, [selectionMode, windowedFocusMsgId]);
 
     // 白框提示音：当 char 新发的消息成为会话最后一条时播放一次（用户自己/历史/翻旧消息都不响）。
