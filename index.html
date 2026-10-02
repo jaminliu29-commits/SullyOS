@@ -254,6 +254,17 @@
       .sully-chat-inputbar {
         transition: padding-bottom 0.18s ease-out;
       }
+      /* 让位是在 focusin 当下一次性加满的（预让位，见 utils/iosStandalone.ts），而键盘是用约 250ms
+         动画升起来的。不缓动的话内容「唰」地弹到位、键盘才慢慢跟上，那个错位就是肉眼看到的闪一下。
+         缓动时长对齐键盘动画，两者一起走。 */
+      .sully-shell-content {
+        transition: padding-bottom 0.25s cubic-bezier(0.17, 0.59, 0.4, 1);
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .sully-shell-content {
+          transition: none;
+        }
+      }
       /* 键盘让位一律用 padding 而不是缩高度：背景会画到 padding box，所以让位的那一层
          背景仍然铺到键盘底下，iOS 半透明候选条模糊到的是 App 自己的背景，看起来输入栏是
          贴着键盘的。缩高度则会在键盘上缘把外壳整个截断，候选条背后透出底下那层桌布，
@@ -277,8 +288,12 @@
         background: var(--ios-keyboard-bg);
         pointer-events: none;
       }
+      /* 键盘已经盖住 home 条，输入栏不必再留 pb-safe，否则它和键盘之间空出一条、露出聊天背景，
+         看起来又是「输入栏和键盘分离」。必须 !important：自定义 CSS 主题整条都用 !important 写，
+         不加的话这里会被主题的 padding / margin 盖掉（浮动胶囊型输入栏尤其明显）。 */
       body.ios-keyboard-open .sully-chat-inputbar {
-        padding-bottom: 0;
+        padding-bottom: 0 !important;
+        margin-bottom: 0 !important;
       }
       /* 通话页：键盘弹起时收起大头像英雄区（约 300px），把可视区让给消息列表 + 输入框。
          可视区收到键盘上方后若不收起大头像，会把输入框顶出可视区。用 max-height 过渡平滑收起。 */

@@ -1292,10 +1292,16 @@ const Chat: React.FC = () => {
     useEffect(() => {
         const repinToBottom = () => {
             if (selectionMode || windowedFocusMsgId !== null || !nearBottomRef.current) return;
-            requestAnimationFrame(() => {
+            // 让位是 250ms 缓动的，clientHeight 整个过程都在变：只贴一次会在动画走完后又露出底部，
+            // 所以跟着动画一路贴到结束。
+            const until = Date.now() + 320;
+            const pin = () => {
                 const el = scrollRef.current;
-                if (el) el.scrollTop = el.scrollHeight;
-            });
+                if (!el) return;
+                el.scrollTop = el.scrollHeight;
+                if (Date.now() < until) requestAnimationFrame(pin);
+            };
+            requestAnimationFrame(pin);
         };
         const viewport = window.visualViewport;
         viewport?.addEventListener('resize', repinToBottom);
