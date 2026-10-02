@@ -1,7 +1,11 @@
 import React from 'react';
 
 // 临时诊断浮层：排查 iOS 全屏 PWA 软键盘弹出时的视口数值。确认根因后整个文件删除。
+// 位置：可视区顶部往下 130px —— iOS 26/27 全屏 PWA 顶栏有模糊层会糊掉贴顶的文字，
+// 往下避开它；同时离键盘足够远，键盘弹出时仍留在可视区内。
 // 自身用 translateY(offsetTop) 跟住可视区，否则键盘 pan 页面时它自己也会被顶出屏幕看不见。
+const VISIBLE_TOP_GAP_PX = 130;
+
 const KeyboardDiagnostic: React.FC = () => {
     const [collapsed, setCollapsed] = React.useState(false);
     const [rows, setRows] = React.useState<[string, string][]>([]);
@@ -56,12 +60,12 @@ const KeyboardDiagnostic: React.FC = () => {
                 top: 0,
                 left: 0,
                 zIndex: 2147483647,
-                transform: `translateY(${offsetTop}px)`,
-                background: 'rgba(0,0,0,0.82)',
+                transform: `translateY(${offsetTop + VISIBLE_TOP_GAP_PX}px)`,
+                background: 'rgba(0,0,0,0.9)',
                 color: '#7dffa8',
-                font: '10px/1.35 ui-monospace, Menlo, monospace',
-                padding: collapsed ? '3px 7px' : '5px 8px',
-                borderBottomRightRadius: 6,
+                font: '12px/1.4 ui-monospace, Menlo, monospace',
+                padding: collapsed ? '4px 8px' : '7px 10px',
+                borderRadius: '0 8px 8px 0',
                 pointerEvents: 'auto',
                 maxWidth: '62vw',
                 whiteSpace: 'pre',
